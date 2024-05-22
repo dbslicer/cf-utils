@@ -1,19 +1,25 @@
 'use strict';
-let config = require('./config');
-let generator = require('generate-password');
-
+const config = require('./config');
+const generator = require('generate-password');
+const {
+  CognitoIdentityProviderClient,
+  AdminCreateUserCommand,
+  AdminInitiateAuthCommand,
+  AdminRespondToAuthChallengeCommand,
+  AdminUpdateUserAttributesCommand
+} = require('@aws-sdk/client-cognito-identity-provider');
 
 /**
  * Create a new user using the admin auth flow
- * @param poolId cognito user poool id
+ * @param poolId cognito user pool id
  * @param clientId cognito application id
  * @param username username
  * @param attributes cognito user attributes
  * @return {Promise}
  */
-function adminCreateUser (poolId, clientId, username, attributes) {
+function adminCreateUser(poolId, clientId, username, attributes) {
   return new Promise((resolve, reject) => {
-    let password = '!' + generator.generate({length: 11, numbers: true, strict: true});
+    let password = '!' + generator.generate({ length: 11, numbers: true, strict: true });
     let createUserParams = {
       UserPoolId: poolId,
       Username: username,
@@ -22,8 +28,8 @@ function adminCreateUser (poolId, clientId, username, attributes) {
       UserAttributes: attributes
     };
 
-    let userPools = new config.AWS.CognitoIdentityServiceProvider();
-    userPools.adminCreateUser(createUserParams, (err, cognitoUser) => {
+    const userPools = new CognitoIdentityProviderClient(config.AWS.clientConfig);
+    userPools.send(new AdminCreateUserCommand(createUserParams), (err, cognitoUser) => {
       if (err) {
         reject(err);
       } else {
@@ -36,7 +42,7 @@ function adminCreateUser (poolId, clientId, username, attributes) {
             PASSWORD: 'temp' + password
           }
         };
-        userPools.adminInitiateAuth(adminInitiateAuthParams, (err, data) => {
+        userPools.send(new AdminInitiateAuthCommand(adminInitiateAuthParams), (err, data) => {
           if (err) {
             reject(err);
           } else {
@@ -50,7 +56,7 @@ function adminCreateUser (poolId, clientId, username, attributes) {
               },
               Session: data.Session
             };
-            userPools.adminRespondToAuthChallenge(adminChallengeResponse, (err, data) => {
+            userPools.send(new AdminRespondToAuthChallengeCommand(adminChallengeResponse), (err, data) => {
               if (err) {
                 reject(err);
               } else {
@@ -82,8 +88,8 @@ function adminUpdateUserAttributes(poolId, username, attributes) {
       Username: username
     };
 
-    let userPools = new config.AWS.CognitoIdentityServiceProvider();
-    userPools.adminUpdateUserAttributes(params, (err, data) => {
+    const userPools = new CognitoIdentityProviderClient(config.AWS.clientConfig);
+    userPools.send(new AdminUpdateUserAttributesCommand(params), (err, data) => {
       if (err) {
         reject(err);
       }

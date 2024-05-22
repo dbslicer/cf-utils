@@ -1,28 +1,32 @@
 'use strict';
-let config = require('./config');
-let fs = require('fs');
-let path = require('path');
-let archiver = require('archiver');
-let mime = require('mime-types');
-
+const config = require('./config');
+const fs = require('fs');
+const path = require('path');
+const archiver = require('archiver');
+const mime = require('mime-types');
+const { Upload } = require('@aws-sdk/lib-storage');
+const {
+  S3Client,
+  ListObjectsV2Command,
+  ListObjectVersionsCommand,
+  DeleteObjectsCommand,
+  GetBucketVersioningCommand,
+  PutObjectCommand
+} = require('@aws-sdk/client-s3');
 
 /**
  * Push an object to s3.
  * @param params AWS upload params
  * @returns {Promise}
  */
-function putS3Object(params) {
-  return new Promise((resolve, reject) => {
-    let s3 = new config.AWS.S3({params: params});
-    s3.upload({Body: params.Body}, function(err, data) {
-      if (err) {
-        reject(err);
-      } else {
-        config.logger.info('Successfully uploaded to s3://', params.Bucket + '/' + params.Key);
-        resolve(data);
-      }
-    });
-  });
+async function putS3Object(params) {
+  const s3 = new S3Client(config.AWS.clientConfig);
+  const data = await new Upload({
+    client: s3,
+    params: params
+  }).done();
+  config.logger.info('Successfully uploaded to s3://', params.Bucket + '/' + params.Key);
+  return data;
 }
 
 
@@ -34,12 +38,12 @@ function putS3Object(params) {
  */
 function listObjects(bucketName, continuationToken) {
   return new Promise((resolve, reject) => {
-    let s3 = new config.AWS.S3();
+    const s3 = new S3Client(config.AWS.clientConfig);
     let params = {
       Bucket: bucketName,
       ContinuationToken: continuationToken
     };
-    s3.listObjectsV2(params, (err, data) => {
+    s3.send(new ListObjectsV2Command(params), (err, data) => {
       if (err) {
         reject(err);
       } else {
@@ -53,13 +57,13 @@ function listObjects(bucketName, continuationToken) {
  * List versions for the given object (up to 1000 versions)
  * @param bucketName name of the bucket
  * @param key object key
- * @param keyMarker continute listing from this marker
- * @param versionIdMarker continute listing from this marker
+ * @param keyMarker continue listing from this marker
+ * @param versionIdMarker continue listing from this marker
  * @returns {Promise}
  */
 function listObjectVersions(bucketName, key, keyMarker, versionIdMarker) {
   return new Promise((resolve, reject) => {
-    let s3 = new config.AWS.S3();
+    const s3 = new S3Client(config.AWS.clientConfig);
     let params = {
       Bucket: bucketName,
       Prefix: key,
@@ -67,7 +71,7 @@ function listObjectVersions(bucketName, key, keyMarker, versionIdMarker) {
       KeyMarker: keyMarker,
       VersionIdMarker: versionIdMarker
     };
-    s3.listObjectVersions(params, (err, data) => {
+    s3.send(new ListObjectVersionsCommand(params), (err, data) => {
       if (err) {
         reject(err);
       } else {
@@ -85,12 +89,12 @@ function listObjectVersions(bucketName, key, keyMarker, versionIdMarker) {
  */
 function deleteObjects(bucketName, objectKeys) {
   return new Promise((resolve, reject) => {
-    let s3 = new config.AWS.S3();
+    const s3 = new S3Client(config.AWS.clientConfig);
     let params = {
       Bucket: bucketName,
       Delete: { Objects: objectKeys }
     };
-    s3.deleteObjects(params, (err, data) => {
+    s3.send(new DeleteObjectsCommand(params), (err, data) => {
       if (err) {
         reject(err);
       } else {
@@ -108,14 +112,14 @@ function deleteObjects(bucketName, objectKeys) {
  */
 function deleteVersionedObjects(bucketName, objectKeys) {
   return new Promise((resolve, reject) => {
-    let listAndDelete = function(key, continuationToken) {
+    let listAndDelete = function (key, continuationToken) {
       return new Promise((resolve, reject) => {
         listObjectVersions(bucketName, key.Key || key,
           continuationToken && continuationToken.NextKeyMarker,
           continuationToken && continuationToken.NextVersionIdMarker)
           .then(data => {
             if (data && data.Versions && data.Versions.length > 0) {
-              let keys = data.Versions.map((version) => ({Key: version.Key, VersionId: version.VersionId}));
+              let keys = data.Versions.map((version) => ({ Key: version.Key, VersionId: version.VersionId }));
               deleteObjects(bucketName, keys)
                 .then(() => data.NextKeyMarker ?
                   listAndDelete(key, {
@@ -131,11 +135,11 @@ function deleteVersionedObjects(bucketName, objectKeys) {
 
     Promise.all(objectKeys.map((key) => new Promise((resolve, reject) => {
       listAndDelete(key)
+        .then(() => resolve())
+        .catch(err => reject(err));
+    })))
       .then(() => resolve())
       .catch(err => reject(err));
-    })))
-    .then(() => resolve())
-    .catch(err => reject(err));
   });
 }
 
@@ -148,21 +152,21 @@ function deleteVersionedObjects(bucketName, objectKeys) {
 function emptyBucket(bucketName) {
   return new Promise((resolve, reject) => {
     let versioningEnabled = false;
-    let s3 = new config.AWS.S3();
+    const s3 = new S3Client(config.AWS.clientConfig);
     let params = {
       Bucket: bucketName
     };
 
-    let listAndDelete = function(continuationToken) {
+    let listAndDelete = function (continuationToken) {
       return new Promise((resolve, reject) => {
         listObjects(bucketName, continuationToken)
           .then(data => {
             if (data && data.Contents && data.Contents.length > 0) {
-              let keys = data.Contents.map((object) => ({Key: object.Key}));
+              let keys = data.Contents.map((object) => ({ Key: object.Key }));
               (versioningEnabled ?
                 deleteVersionedObjects(bucketName, keys) :
                 deleteObjects(bucketName, keys))
-                .then(() =>  data.NextContinuationToken ?
+                .then(() => data.NextContinuationToken ?
                   listAndDelete(data.NextContinuationToken) : resolve());
             } else {
               resolve();
@@ -171,7 +175,7 @@ function emptyBucket(bucketName) {
       });
     };
 
-    s3.getBucketVersioning(params, (err, data) => {
+    s3.send(new GetBucketVersioningCommand(params), (err, data) => {
       if (err) {
         if (err.toString().indexOf('The specified bucket does not exist') >= 0) {
           config.logger.info('Bucket', bucketName, 'does not exist, continuing...');
@@ -183,8 +187,8 @@ function emptyBucket(bucketName) {
         versioningEnabled = data.Status === 'Enabled';
 
         listAndDelete()
-        .then(() => resolve())
-        .catch(err => reject(err));
+          .then(() => resolve())
+          .catch(err => reject(err));
       }
     });
   });
@@ -202,7 +206,7 @@ function uploadDirectory(bucketName, prefix, source) {
   if (!source) { source = prefix; prefix = null; }
 
   return new Promise((resolve, reject) => {
-    let s3 = new config.AWS.S3();
+    const s3 = new S3Client(config.AWS.clientConfig);
 
     fs.readdir(source, (err, files) => {
       if (err) {
@@ -214,12 +218,12 @@ function uploadDirectory(bucketName, prefix, source) {
           let uploadFile = function (name, filePath) {
             let key = (prefix ? prefix + '/' : '') + name;
             return new Promise((resolve, reject) => {
-              s3.putObject({
+              s3.send(new PutObjectCommand({
                 Bucket: bucketName,
                 Key: key,
                 Body: fs.createReadStream(filePath),
                 ContentType: mime.lookup(name) || 'application/octet-stream'
-              }, (err) => {
+              }), (err) => {
                 if (err) {
                   reject(err);
                 } else {
@@ -273,16 +277,20 @@ function uploadDirectoryAsZipFile(bucketName, key, source, dest, name) {
 
 
     let fullPath = path.join(dest, name);
-    let output   = fs.createWriteStream(fullPath);
-    let archive  = archiver.create('zip');
+    let output = fs.createWriteStream(fullPath);
+    let archive = archiver.create('zip');
 
     output.on('close', function () {
       config.logger.info('Zip archive written to ' + name + ' as ' + archive.pointer() + ' total bytes compressed');
 
       config.logger.info('Uploading ...');
-      let s3 = new config.AWS.S3({params: {Bucket: bucketName, Key: key}});
+      const s3 = new S3Client(config.AWS.clientConfig);
       let stream = fs.createReadStream(fullPath);
-      s3.putObject({Body: stream}, function(err) {
+      s3.send(new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        Body: stream
+      }), function (err) {
         if (err) {
           reject(err);
         } else {
@@ -291,12 +299,12 @@ function uploadDirectoryAsZipFile(bucketName, key, source, dest, name) {
           resolve(fullPath);
         }
       })
-      .on('httpUploadProgress', (progress, response) => {
-        process.stdout.write('.');
-      });
+        .on('httpUploadProgress', (progress, response) => {
+          process.stdout.write('.');
+        });
     });
 
-    archive.on('error', function(err){
+    archive.on('error', function (err) {
       reject(err);
     });
 

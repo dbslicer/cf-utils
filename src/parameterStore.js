@@ -1,6 +1,11 @@
 'use strict';
-let config = require('./config');
-
+const config = require('./config');
+const {
+  SSMClient,
+  PutParameterCommand,
+  GetParametersCommand,
+  DeleteParameterCommand
+} = require('@aws-sdk/client-ssm');
 
 /**
  * Upsert parameter
@@ -9,8 +14,8 @@ let config = require('./config');
  */
 function putParameter(params) {
   return new Promise((resolve, reject) => {
-    let ssm = new config.AWS.SSM();
-    ssm.putParameter(params, (err) => {
+    const ssm = new SSMClient(config.AWS.clientConfig);
+    ssm.send(new PutParameterCommand(params), (err) => {
       if (err) {
         reject(err);
       } else {
@@ -29,11 +34,11 @@ function putParameter(params) {
 function getParameter(name) {
   return new Promise((resolve, reject) => {
     let params = {
-      Names: [ name ],
+      Names: [name],
       WithDecryption: true
     };
-    let ssm = new config.AWS.SSM();
-    ssm.getParameters(params, (err, data) => {
+    const ssm = new SSMClient(config.AWS.clientConfig);
+    ssm.send(new GetParametersCommand(params), (err, data) => {
       if (err) {
         reject(err);
       } else {
@@ -56,10 +61,10 @@ function getParameter(name) {
 function checkParameter(name) {
   return new Promise((resolve, reject) => {
     let params = {
-      Names: [ name ]
+      Names: [name]
     };
-    let ssm = new config.AWS.SSM();
-    ssm.getParameters(params, (err, data) => {
+    const ssm = new SSMClient(config.AWS.clientConfig);
+    ssm.send(new GetParametersCommand(params), (err, data) => {
       if (err) {
         reject(err);
       } else {
@@ -79,8 +84,8 @@ function deleteParameter(name) {
     let params = {
       Name: name
     };
-    let ssm = new config.AWS.SSM();
-    ssm.deleteParameter(params, (err) => {
+    const ssm = new SSMClient(config.AWS.clientConfig);
+    ssm.send(new DeleteParameterCommand(params), (err) => {
       if (err) {
         reject(err);
       } else {

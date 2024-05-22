@@ -1,6 +1,12 @@
 'use strict';
-let config = require('./config');
-
+const config = require('./config');
+const {
+  IoTClient,
+  GetPolicyCommand,
+  CreatePolicyVersionCommand,
+  ListPolicyVersionsCommand,
+  DeletePolicyVersionCommand
+} = require('@aws-sdk/client-iot');
 
 /**
  * Updates the iot policies that match the naming convention
@@ -8,16 +14,18 @@ let config = require('./config');
  * The output policy name key (to be updated) must have the same name as the policy with the updates with 'Template' removed (so suffixed with 'IoTPolicy')
  * @param {Object} stackOutput output variables of a stack
  */
-function updateIoTPolicies(stackOutput){
+function updateIoTPolicies(stackOutput) {
   let promises = [];
-  const iot = new config.AWS.Iot();
+  const iot = new IoTClient(config.AWS.clientConfig);
   Object.keys(stackOutput).forEach(outputKey => {
-    if(outputKey.includes('IoTPolicyTemplate')){
+    if (outputKey.includes('IoTPolicyTemplate')) {
       promises.push(
-        iot.getPolicy({policyName: stackOutput[outputKey]}).promise().then((newPolicy) => {
+        iot.send(new GetPolicyCommand({ policyName: stackOutput[outputKey] })).then((newPolicy) => {
           let policyToUpdate = stackOutput[outputKey.replace('Template', '')];
           _removeOldPolicyVersions(policyToUpdate, iot).then(() => {
-            iot.createPolicyVersion({policyName: policyToUpdate, policyDocument: newPolicy.policyDocument, setAsDefault: true}).promise()
+            iot.send(
+              new CreatePolicyVersionCommand({ policyName: policyToUpdate, policyDocument: newPolicy.policyDocument, setAsDefault: true })
+            )
           })
         })
       );
@@ -25,18 +33,19 @@ function updateIoTPolicies(stackOutput){
   });
   return Promise.all(promises)
 }
+
 /**
  * Removes all non-default policy versions from iot policy. IoT policies can only have a max of 5 policy versions
  * @param {String} policyName name of the iot policy
  * @param {Object} iot instance of AWS.IoT() to use
  */
-function _removeOldPolicyVersions(policyName, iot){
-  return iot.listPolicyVersions({policyName: policyName}).promise().then((policies) => {
-    if(policies.policyVersions.length > 1){
+function _removeOldPolicyVersions(policyName, iot) {
+  return iot.send(new ListPolicyVersionsCommand({ policyName: policyName })).then((policies) => {
+    if (policies.policyVersions.length > 1) {
       let promises = [];
       policies.policyVersions.forEach(policyVersion => {
-        if(!policyVersion.isDefaultVersion){
-          promises.push(iot.deletePolicyVersion({policyName: policyName, policyVersionId: policyVersion.versionId}).promise());
+        if (!policyVersion.isDefaultVersion) {
+          promises.push(iot.send(new DeletePolicyVersionCommand({ policyName: policyName, policyVersionId: policyVersion.versionId })));
         };
       })
       return Promise.all(promises)

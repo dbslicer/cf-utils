@@ -1,7 +1,10 @@
 'use strict';
-let config = require('./config');
-
-
+const config = require('./config');
+const {
+  CloudWatchLogsClient,
+  DescribeLogGroupsCommand,
+  DeleteLogGroupCommand
+} = require("@aws-sdk/client-cloudwatch-logs");
 
 /**
  * List the log groups that match the specified filter
@@ -11,13 +14,13 @@ let config = require('./config');
  */
 function listLogGroups(filter, continuationToken) {
   return new Promise((resolve, reject) => {
-    let cw = new config.AWS.CloudWatchLogs();
+    const cw = new CloudWatchLogsClient(config.AWS.clientConfig);
     let params = {
       logGroupNamePrefix: filter,
       nextToken: continuationToken
     };
 
-    cw.describeLogGroups(params, (err, data) => {
+    cw.send(new DescribeLogGroupsCommand(params), (err, data) => {
       if (err) {
         reject(err);
       } else {
@@ -37,8 +40,8 @@ function deleteLogGroup(name) {
     let params = {
       logGroupName: name
     };
-    let cw = new config.AWS.CloudWatchLogs();
-    cw.deleteLogGroup(params, (err, data) => {
+    const cw = new CloudWatchLogsClient(config.AWS.clientConfig);
+    cw.send(new DeleteLogGroupCommand(params), (err, data) => {
       if (err) {
         reject(err);
       } else {
@@ -72,11 +75,11 @@ function deleteLogGroups(filter) {
             }
           }).catch(err => reject(err));
       })
-      .then(continuationToken => {
-        if (continuationToken) {
-          return (listAndDelete(continuationToken))
-        }
-      });
+        .then(continuationToken => {
+          if (continuationToken) {
+            return (listAndDelete(continuationToken))
+          }
+        });
     };
 
     listAndDelete()

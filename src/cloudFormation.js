@@ -1,9 +1,20 @@
 'use strict';
-let config = require('./config');
-let s3 = require('./s3');
-let fs = require('fs');
-let inquirer = require('inquirer');
-let { spawn } = require('child_process');
+const config = require('./config');
+const s3 = require('./s3');
+const fs = require('fs');
+const inquirer = require('inquirer');
+const { spawn } = require('child_process');
+const {
+  CloudFormationClient,
+  DescribeStacksCommand,
+  CreateStackCommand,
+  UpdateStackCommand,
+  CreateChangeSetCommand,
+  ExecuteChangeSetCommand,
+  DeleteChangeSetCommand,
+  DescribeChangeSetCommand,
+  DeleteStackCommand
+} = require('@aws-sdk/client-cloudformation');
 
 /**
  * Create/Update a stack. Automatically switches to change sets if stack contains transforms (e.g. SAM)
@@ -27,7 +38,7 @@ function upsertStack(name, script, parameters, options) {
   if (typeof options === "boolean") { // To maintain backwards compatibility
     options = { review: options };
   } else {
-    options = options || { };
+    options = options || {};
   }
 
   let containsTransforms = options.hasOwnProperty('containsTransforms') ?
@@ -35,17 +46,17 @@ function upsertStack(name, script, parameters, options) {
 
   if (options.s3Bucket) {
     return s3.putS3Object({
-        Bucket: options.s3Bucket,
-        Key: `${options.s3Prefix}${script}`,
-        Body: fs.createReadStream(script)
-      }).then(() =>
-        upsertStack(
-          name,
-          `https://s3.amazonaws.com/${options.s3Bucket}/${options.s3Prefix}${script}`,
-          parameters,
-          { review: options.review === true, containsTransforms: containsTransforms }
-        )
-      );
+      Bucket: options.s3Bucket,
+      Key: `${options.s3Prefix}${script}`,
+      Body: fs.createReadStream(script)
+    }).then(() =>
+      upsertStack(
+        name,
+        `https://s3.amazonaws.com/${options.s3Bucket}/${options.s3Prefix}${script}`,
+        parameters,
+        { review: options.review === true, containsTransforms: containsTransforms }
+      )
+    );
   }
 
   return new Promise((resolve, reject) => {
@@ -60,7 +71,7 @@ function upsertStack(name, script, parameters, options) {
     };
 
     if (script.substring(0, 10) === 'https://s3') {
-      params.TemplateURL  = script;
+      params.TemplateURL = script;
     } else {
       if (!fs.existsSync(script)) {
         reject(new Error(`${script} does not exist!`));
@@ -76,29 +87,29 @@ function upsertStack(name, script, parameters, options) {
           config.logger.info('Stack contains transforms, deploying via change set...');
           delete params.DisableRollback;
           resolve(applyChangeSet(Object.assign({}, params, {
-              ChangeSetName: generateChangeSetName(),
-              ChangeSetType: 'UPDATE'
-            }))
+            ChangeSetName: generateChangeSetName(),
+            ChangeSetType: 'UPDATE'
+          }))
           );
         } else {
           return updateStack(params)
-          .then(data => resolve(data))
-          .catch(err => reject(err))
+            .then(data => resolve(data))
+            .catch(err => reject(err))
         }
       });
     };
 
 
-    let cf = new config.AWS.CloudFormation();
-    cf.describeStacks({StackName: name}, (err) => {
+    const cf = new CloudFormationClient(config.AWS.clientConfig);
+    cf.send(new DescribeStacksCommand({ StackName: name }), (err) => {
       if (err) {
         if (containsTransforms) {
           config.logger.info('Stack contains transforms, deploying via change set...');
           delete params.DisableRollback;
           resolve(applyChangeSet(Object.assign({}, params, {
-              ChangeSetName: generateChangeSetName(),
-              ChangeSetType: 'CREATE'
-            }))
+            ChangeSetName: generateChangeSetName(),
+            ChangeSetType: 'CREATE'
+          }))
           );
         } else {
           createStack(params)
@@ -119,7 +130,7 @@ function upsertStack(name, script, parameters, options) {
           createChangeSet(Object.assign({}, params, csParams))
             .then(cs => {
               if (cs) {
-                config.logger.info({ChangeSet: cs});
+                config.logger.info({ ChangeSet: cs });
                 inquirer.prompt(
                   [{
                     type: 'confirm',
@@ -161,8 +172,8 @@ function upsertStack(name, script, parameters, options) {
 function createStack(params) {
   return new Promise((resolve, reject) => {
     params.DisableRollback = true;
-    let cf = new config.AWS.CloudFormation();
-    cf.createStack(params, (err) => {
+    const cf = new CloudFormationClient(config.AWS.clientConfig);
+    cf.send(new CreateStackCommand(params), (err) => {
       if (err) {
         reject(err);
       } else {
@@ -179,8 +190,8 @@ function createStack(params) {
  */
 function updateStack(params) {
   return new Promise((resolve, reject) => {
-    let cf = new config.AWS.CloudFormation();
-    cf.updateStack(params, (err) => {
+    const cf = new CloudFormationClient(config.AWS.clientConfig);
+    cf.send(new UpdateStackCommand(params), (err) => {
       if (err) {
         if (err.toString().indexOf('No updates are to be performed') >= 0) {
           config.logger.info('There are no changes to apply, continuing....');
@@ -226,8 +237,8 @@ function applyChangeSet(params) {
  */
 function createChangeSet(params) {
   return new Promise((resolve, reject) => {
-    let cf = new config.AWS.CloudFormation();
-    cf.createChangeSet(params, (err) => {
+    const cf = new CloudFormationClient(config.AWS.clientConfig);
+    cf.send(new CreateChangeSetCommand(params), (err) => {
       if (err) {
         reject(err);
       } else {
@@ -244,8 +255,8 @@ function createChangeSet(params) {
  */
 function executeChangeSet(params) {
   return new Promise((resolve, reject) => {
-    let cf = new config.AWS.CloudFormation();
-    cf.executeChangeSet(params, (err) => {
+    const cf = new CloudFormationClient(config.AWS.clientConfig);
+    cf.send(new ExecuteChangeSetCommand(params), (err) => {
       if (err) {
         reject(err);
       } else {
@@ -281,7 +292,7 @@ function deployStack(name, script, parameters) {
         '--capabilities',         'CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM',
         ' --parameter-overrides', params
       ],
-      { shell: true}
+      { shell: true }
     );
 
     let err = '';
@@ -309,8 +320,8 @@ function deployStack(name, script, parameters) {
  */
 function describeStack(name) {
   return new Promise((resolve, reject) => {
-    let cf = new config.AWS.CloudFormation();
-    cf.describeStacks({StackName : name}, (err, data) => {
+    const cf = new CloudFormationClient(config.AWS.clientConfig);
+    cf.send(new DescribeStacksCommand({ StackName: name }), (err, data) => {
       if (err) {
         reject(err);
       } else {
@@ -327,8 +338,7 @@ function describeStack(name) {
  */
 function describeOutput(name) {
   return describeStack(name)
-    .then(data => extractOutput(data)
-  );
+    .then(data => extractOutput(data));
 }
 
 /**
@@ -352,8 +362,8 @@ function deleteStack(name) {
     let params = {
       StackName: name
     };
-    let cf = new config.AWS.CloudFormation();
-    cf.describeStacks({StackName: name}, (err, data) => {
+    const cf = new CloudFormationClient(config.AWS.clientConfig);
+    cf.send(new DescribeStacksCommand({ StackName: name }), (err, data) => {
       if (err) {
         if (err.message.indexOf('does not exist')) {
           config.logger.info('Stack already deleted or never existed.');
@@ -363,18 +373,20 @@ function deleteStack(name) {
       } else {
         // Check for any S3 buckets and if found empty each bucket otherwise delete stack operation will fail
         let s3Operations = [];
-        for (let i = 0; i < data.Stacks[0].Outputs.length; i++) {
-          if (/.*Bucket$/.test(data.Stacks[0].Outputs[i].OutputKey)) {
-            s3Operations.push(new Promise((resolve) => {
-              config.logger.info('Emptying S3 bucket', data.Stacks[0].Outputs[i].OutputValue);
-              resolve(s3.emptyBucket(data.Stacks[0].Outputs[i].OutputValue));
-            }))
+        if (data.Stacks[0].Outputs !== undefined) {
+          for (let i = 0; i < data.Stacks[0].Outputs.length; i++) {
+            if (/.*Bucket$/.test(data.Stacks[0].Outputs[i].OutputKey)) {
+              s3Operations.push(new Promise((resolve) => {
+                config.logger.info('Emptying S3 bucket', data.Stacks[0].Outputs[i].OutputValue);
+                resolve(s3.emptyBucket(data.Stacks[0].Outputs[i].OutputValue));
+              }))
+            }
           }
         }
 
         Promise.all(s3Operations)
           .then(() => {
-            return cf.deleteStack(params, (err) => {
+            return cf.send(new DeleteStackCommand(params), (err) => {
               if (err) {
                 reject(err);
               } else {
@@ -395,8 +407,8 @@ function deleteStack(name) {
  */
 function deleteChangeSet(params) {
   return new Promise((resolve, reject) => {
-    let cf = new config.AWS.CloudFormation();
-    cf.deleteChangeSet(params, (err) => {
+    const cf = new CloudFormationClient(config.AWS.clientConfig);
+    cf.send(new DeleteChangeSetCommand(params), (err) => {
       if (err) {
         reject(err);
       } else {
@@ -413,8 +425,8 @@ function deleteChangeSet(params) {
  */
 function pollStack(params) {
   return new Promise((resolve, reject) => {
-    let cf = new config.AWS.CloudFormation();
-    cf.describeStacks({StackName : params.StackName}, (err, data) => {
+    const cf = new CloudFormationClient(config.AWS.clientConfig);
+    cf.send(new DescribeStacksCommand({ StackName: params.StackName }), (err, data) => {
       if (err) {
         if (err.message.indexOf('does not exist') >= 0) {
           config.logger.info('Stack deleted or never existed.');
@@ -435,7 +447,7 @@ function pollStack(params) {
           case 'UPDATE_FAILED':
           case 'DELETE_FAILED':
           case 'UPDATE_ROLLBACK_COMPLETE':
-            config.logger.warn({StackDetails: data});
+            config.logger.warn({ StackDetails: data });
             reject(new Error('Stack operation failed'));
             return;
         }
@@ -456,9 +468,10 @@ function pollStack(params) {
  */
 function pollChangeSet(params) {
   return new Promise((resolve, reject) => {
-    let cf = new config.AWS.CloudFormation();
-    cf.describeChangeSet({
-      ChangeSetName : params.ChangeSetName, StackName: params.StackName}, (err, cs) => {
+    const cf = new CloudFormationClient(config.AWS.clientConfig);
+    cf.send(new DescribeChangeSetCommand({
+      ChangeSetName: params.ChangeSetName, StackName: params.StackName
+    }), (err, cs) => {
       if (err) {
         if (err.message.indexOf('does not exist') >= 0) {
           config.logger.info('Change set deleted or never existed.');
@@ -476,11 +489,11 @@ function pollChangeSet(params) {
             return;
           case 'FAILED':
             if (cs.StatusReason.indexOf("No updates are to be performed") >= 0 ||
-                cs.StatusReason.indexOf("didn't contain changes") >= 0) {
+              cs.StatusReason.indexOf("didn't contain changes") >= 0) {
               config.logger.info('No updates are to be performed');
               resolve();
             } else {
-              config.logger.warn({ChangeSet: cs});
+              config.logger.warn({ ChangeSet: cs });
               reject(new Error('Changeset creation failed'));
             }
             return;
@@ -493,11 +506,6 @@ function pollChangeSet(params) {
     });
   });
 }
-
-
-
-
-
 
 
 module.exports = {
