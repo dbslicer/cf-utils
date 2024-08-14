@@ -86,7 +86,7 @@ let baseConfig = {
           credentials: fromIni(),
           retryStrategy: new ConfiguredRetryStrategy(
             12, // max attempts / retries
-            (retryAttempt) => 5 + retryAttempt * 1000 // backoff function
+            (retryAttempt) => (retryAttempt + 2) * 1000 // backoff function
           )
         };
         return this.clientConfig;
