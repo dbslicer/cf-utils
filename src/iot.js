@@ -12,26 +12,32 @@ const {
  * Updates the iot policies that match the naming convention
  * The output policy name key (with the updates) must be suffixed with 'IoTPolicyTemplate'
  * The output policy name key (to be updated) must have the same name as the policy with the updates with 'Template' removed (so suffixed with 'IoTPolicy')
- * @param {Object} stackOutput output variables of a stack
+ * @param {Object.<string, string>} stackOutput output variables of a stack
  */
-function updateIoTPolicies(stackOutput) {
-  let promises = [];
+async function updateIoTPolicies(stackOutput) {
   const iot = new IoTClient(config.AWS.clientConfig);
-  Object.keys(stackOutput).forEach(outputKey => {
+
+  const updatePolicy = async function (outputKey) {
+    const newPolicy = await iot.send(new GetPolicyCommand({ policyName: stackOutput[outputKey] }));
+    const policyToUpdate = stackOutput[outputKey.replace('Template', '')];
+    await _removeOldPolicyVersions(policyToUpdate, iot);
+    return await iot.send(
+      new CreatePolicyVersionCommand({
+        policyName: policyToUpdate,
+        policyDocument: newPolicy.policyDocument,
+        setAsDefault: true
+      })
+    );
+  };
+
+  const promises = [];
+  Object.keys(stackOutput).forEach((outputKey) => {
     if (outputKey.includes('IoTPolicyTemplate')) {
-      promises.push(
-        iot.send(new GetPolicyCommand({ policyName: stackOutput[outputKey] })).then((newPolicy) => {
-          let policyToUpdate = stackOutput[outputKey.replace('Template', '')];
-          _removeOldPolicyVersions(policyToUpdate, iot).then(() => {
-            iot.send(
-              new CreatePolicyVersionCommand({ policyName: policyToUpdate, policyDocument: newPolicy.policyDocument, setAsDefault: true })
-            )
-          })
-        })
-      );
-    };
+      promises.push(updatePolicy(outputKey));
+    }
   });
-  return Promise.all(promises)
+
+  return await Promise.all(promises);
 }
 
 /**
@@ -39,21 +45,21 @@ function updateIoTPolicies(stackOutput) {
  * @param {String} policyName name of the iot policy
  * @param {Object} iot instance of AWS.IoT() to use
  */
-function _removeOldPolicyVersions(policyName, iot) {
-  return iot.send(new ListPolicyVersionsCommand({ policyName: policyName })).then((policies) => {
-    if (policies.policyVersions.length > 1) {
-      let promises = [];
-      policies.policyVersions.forEach(policyVersion => {
-        if (!policyVersion.isDefaultVersion) {
-          promises.push(iot.send(new DeletePolicyVersionCommand({ policyName: policyName, policyVersionId: policyVersion.versionId })));
-        };
-      })
-      return Promise.all(promises)
-    }
-    else {
-      return Promise.resolve()
-    };
-  });
+async function _removeOldPolicyVersions(policyName, iot) {
+  const policies = await iot.send(new ListPolicyVersionsCommand({ policyName: policyName }));
+  if (policies.policyVersions.length > 1) {
+    const promises = [];
+    policies.policyVersions.forEach((policyVersion) => {
+      if (!policyVersion.isDefaultVersion) {
+        promises.push(iot.send(new DeletePolicyVersionCommand({
+          policyName: policyName,
+          policyVersionId: policyVersion.versionId
+        })));
+      }
+    });
+
+    return await Promise.all(promises);
+  }
 };
 
 

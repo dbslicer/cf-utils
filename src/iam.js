@@ -6,36 +6,20 @@ const {
   GetUserCommand
 } = require("@aws-sdk/client-iam");
 
-function describeRole(name) {
-  return new Promise((resolve, reject) => {
-    const iam = new IAMClient(config.AWS.clientConfig);
-    var params = {
-      RoleName: name
-    };
-    iam.send(new GetRoleCommand(params), (err, data) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(data);
-      }
-    });
-  });
+async function describeRole(name) {
+  const iam = new IAMClient(config.AWS.clientConfig);
+  var params = {
+    RoleName: name
+  };
+  return await iam.send(new GetRoleCommand(params));
 }
 
-function describeUser(name) {
-  return new Promise((resolve, reject) => {
-    const iam = new IAMClient(config.AWS.clientConfig);
-    var params = {
-      UserName: name
-    };
-    iam.send(new GetUserCommand(params), (err, data) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(data);
-      }
-    });
-  });
+async function describeUser(name) {
+  const iam = new IAMClient(config.AWS.clientConfig);
+  var params = {
+    UserName: name
+  };
+  return await iam.send(new GetUserCommand(params));
 }
 
 

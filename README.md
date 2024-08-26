@@ -18,6 +18,8 @@ all the parameters it needs or your infrastructure can be created directly yet s
 #### Changes
 
 - AWS SDK updated to v3
+- Added tests with `aws-sdk-client-mock`.
+- Refactored client calls to use async / await pattern instead of promises as `aws-sdk-client-mock` does not support callbacks.
 - Removed unused dependencies and updated outdated.
 - `config` module does not expose any AWS Client as of v2.0.0.
 - A client configuration object has been made available through `config.AWS.clientConfig` for initialisation of Clients internally. This can also be used by consumers of `cf-utils` if they need the same configuration.
