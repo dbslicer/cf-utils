@@ -117,8 +117,6 @@ const mockS3 = {
  * @returns mockSpawn object  with spawn function
  */
 const mockSpawn = function (callback) {
-  // const mockSpawn = new EventEmitter();
-  // command: string, args?: readonly string[], options?: SpawnOptionsWithoutStdio
   return {
     spawn: (command, args, options) => {
       callback("constructor", [command, args, options]);
