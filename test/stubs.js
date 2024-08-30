@@ -1,4 +1,4 @@
-const { PassThrough, EventEmitter } = require("stream");
+const { PassThrough } = require("stream");
 const path = require("path");
 
 /**
