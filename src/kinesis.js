@@ -1,5 +1,16 @@
 'use strict';
-let config = require('./config');
+const config = require('./config');
+const {
+  FirehoseClient,
+  DescribeDeliveryStreamCommand,
+  UpdateDestinationCommand,
+  TagDeliveryStreamCommand
+} = require('@aws-sdk/client-firehose');
+const {
+  KinesisAnalyticsClient,
+  DescribeApplicationCommand,
+  StartApplicationCommand
+} = require('@aws-sdk/client-kinesis-analytics');
 
 /**
  * Create a parquet conversion step for the specified firehose stream
@@ -7,46 +18,43 @@ let config = require('./config');
  * @param {*} databaseName glue database name
  * @param {*} tableName table to store conversion output
  */
-function createParquetConversion(deliveryStreamName, databaseName, tableName) {
-  let firehose = new config.AWS.Firehose();
-  return firehose.describeDeliveryStream({DeliveryStreamName: deliveryStreamName})
-  .promise()
-  .then(stream => {
-    let s3dest = stream.DeliveryStreamDescription.Destinations[0]['ExtendedS3DestinationDescription'];
+async function createParquetConversion(deliveryStreamName, databaseName, tableName) {
+  const firehose = new FirehoseClient(config.AWS.clientConfig);
+  const stream = await firehose.send(new DescribeDeliveryStreamCommand({ DeliveryStreamName: deliveryStreamName }))
 
-    s3dest.DataFormatConversionConfiguration = {
-      SchemaConfiguration: {
-        RoleARN: "",
-        DatabaseName: databaseName,
-        TableName: tableName,
-        Region: config.awsRegion,
-        VersionId: "LATEST"
-      },
-      InputFormatConfiguration: {Deserializer: {OpenXJsonSerDe: {}}},
-      OutputFormatConfiguration: {Serializer: {ParquetSerDe: {}}},
-      Enabled: true
-    };
-    s3dest.DataFormatConversionConfiguration.SchemaConfiguration.RoleARN = s3dest.RoleARN;
-    s3dest.CompressionFormat = "UNCOMPRESSED";
-    s3dest.BufferingHints = {SizeInMBs:64,IntervalInSeconds:60};
+  let s3dest = stream.DeliveryStreamDescription.Destinations[0]['ExtendedS3DestinationDescription'];
+  s3dest.DataFormatConversionConfiguration = {
+    SchemaConfiguration: {
+      RoleARN: "",
+      DatabaseName: databaseName,
+      TableName: tableName,
+      Region: config.awsRegion,
+      VersionId: "LATEST"
+    },
+    InputFormatConfiguration: { Deserializer: { OpenXJsonSerDe: {} } },
+    OutputFormatConfiguration: { Serializer: { ParquetSerDe: {} } },
+    Enabled: true
+  };
+  s3dest.DataFormatConversionConfiguration.SchemaConfiguration.RoleARN = s3dest.RoleARN;
+  s3dest.CompressionFormat = "UNCOMPRESSED";
+  s3dest.BufferingHints = { SizeInMBs: 64, IntervalInSeconds: 60 };
 
-    const params = {
-      ExtendedS3DestinationUpdate:    s3dest,
-      CurrentDeliveryStreamVersionId: stream.DeliveryStreamDescription.VersionId,
-      DestinationId:                  stream.DeliveryStreamDescription.Destinations[0].DestinationId,
-      DeliveryStreamName:             stream.DeliveryStreamDescription.DeliveryStreamName
-    };
-    config.logger.info("Updating firehose with parquet conversion:", params.DeliveryStreamName );
-    return firehose.updateDestination(params).promise()
-  });
+  const params = {
+    ExtendedS3DestinationUpdate: s3dest,
+    CurrentDeliveryStreamVersionId: stream.DeliveryStreamDescription.VersionId,
+    DestinationId: stream.DeliveryStreamDescription.Destinations[0].DestinationId,
+    DeliveryStreamName: stream.DeliveryStreamDescription.DeliveryStreamName
+  };
+  config.logger.info("Updating firehose with parquet conversion:", params.DeliveryStreamName);
+  return await firehose.send(new UpdateDestinationCommand(params));
 }
 
 /**
  * Tag the specified firehose stream
  * @param {String} firehose kinesis firehose stream
  */
-function tagFirehoseStream (firehose, tags) {
-  const fh = new config.AWS.Firehose({apiVersion: '2015-08-14'});
+async function tagFirehoseStream(firehose, tags) {
+  const fh = new FirehoseClient(config.AWS.clientConfig);
   let defaultTags = [
     {
       Key: 'acs:project',
@@ -57,27 +65,26 @@ function tagFirehoseStream (firehose, tags) {
       Value: config.projectVersion
     }
   ];
-  return fh.tagDeliveryStream({DeliveryStreamName: firehose, Tags: tags ? tags : defaultTags}).promise();
+  return await fh.send(new TagDeliveryStreamCommand({ DeliveryStreamName: firehose, Tags: tags ? tags : defaultTags }));
 }
 
 /**
- * Launch the specifed kinesis application.
+ * Launch the specified kinesis application.
  * @param {String} application kinesis application
  */
-function startApplication (application) {
-  const kinesis = new config.AWS.KinesisAnalytics({apiVersion: '2015-08-14'});
-  return kinesis.describeApplication({ApplicationName: application})
-  .promise()
-  .then(appInfo => {
-    config.logger.info('Starting kinesis application:', application, '...');
-    return kinesis.startApplication({
-      ApplicationName: application,
-      InputConfigurations: [{
-        Id: appInfo.InputDescriptions[0].Id,
-        InputStartingPositionConfiguration: {InputStartingPosition: 'NOW'}
-      }]
-    }).promise();
-  });
+async function startApplication(application) {
+  const kinesis = new KinesisAnalyticsClient(config.AWS.clientConfig);
+
+  const appInfo = await kinesis.send(new DescribeApplicationCommand({ ApplicationName: application }));
+  config.logger.info('Starting kinesis application:', application, '...');
+
+  return await kinesis.send(new StartApplicationCommand({
+    ApplicationName: application,
+    InputConfigurations: [{
+      Id: appInfo.InputDescriptions[0].Id,
+      InputStartingPositionConfiguration: { InputStartingPosition: 'NOW' }
+    }]
+  }));
 }
 
 

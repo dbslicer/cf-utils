@@ -1,49 +1,48 @@
-#### 
+# cf-utils - CloudFormation Utilities
 
-# cf-utils - CloudFormation Utilities 
+Tools and utilities to enable infrastructure as code. Inspired by awslabs projects that use a combination of task runners,
+cloud formation templates and sdk calls to reliably and repeatably deploy infrastructure.
 
-Tools and utilities to enable infrastructure as code. Inspired by awslabs projects that use a combination of task runners, 
-cloud formation templates and sdk calls to reliably and repeatably deploy infrastructure. 
-
-While CloudFormation is comprehensive there are some areas that are painful or missing and these utilities aim to fill those 
+While CloudFormation is comprehensive there are some areas that are painful or missing and these utilities aim to fill those
 gaps. The rule of thumb (with one notable exception) is that if it can be done with CloudFormation templates then do so.
-The exception is using lambdas defined in the template that run during cloud formation (e.g. to help describe stacks,  
-gather input or take actions via the AWS SDK). While this works it leaves the lambdas around after deployment and the can 
-seriously clutter your infrastructure if you deploy dozens of stacks.
+The exception is using lambdas defined in the template that run during cloud formation (e.g. to help describe stacks,
+gather input or take actions via the AWS SDK). While this works it leaves the lambdas around after deployment and the can seriously clutter your infrastructure if you deploy dozens of stacks.
 
 Otherwise these utilities encapsulate calling the AWS SDK directly from your task so that your cloud formation gets passed
-all the parameters it needs or your infrastructure can be created directly yet still maintained as code.   
+all the parameters it needs or your infrastructure can be created directly yet still maintained as code.
 
 ## Latest Update
 
-Added ability to use S3 for CloudFormation templates. If directed, `upsertStack` will upload your template to S3 and use TemplateURL when making calls to createStack and createChangeSet. S3 settings are controlled via the new options parameter `function upsertStack(name, script, parameters, OPTIONS)`: 
+### v2.0.0
 
+#### Changes
 
-```
-{
-  review   : boolean // If stack exists and this is true, then generate change set and pause update pending reviewer direction.
-  s3Bucket : string  // If this is set then the specified script will be uploaded to S3 and the TemplateURL will be used instead of TemplateBody.
-  s3Prefix : string  // [optional] Used when naming template in S3 bucket if s3Bucket is specified.
- }
-```
+- AWS SDK updated to v3
+- Added tests with `aws-sdk-client-mock`.
+- Refactored client calls to use async / await pattern instead of promises as `aws-sdk-client-mock` does not support callbacks.
+- Removed unused dependencies and updated outdated.
+- `config` module does not expose any AWS Client as of v2.0.0.
+- A client configuration object has been made available through `config.AWS.clientConfig` for initialisation of Clients internally. This can also be used by consumers of `cf-utils` if they need the same configuration.
 
-You can also take care of uploading the template yourself and pass in an S3 url ('https://s3.amazonaws.com....') instead of a local path for the `script` parameter.
+#### Breaking Change
+
+Due to the fact that `cf-utils` no longer exposes the AWS SDK through the `config` module, consuming project will need to update their code to remove any instances of `new cfutils.config.AWS.{AWS_SERVICE}()`.
 
 ## Requirements
 
-The code is written in javascript ECMAScript 6 
+The code is written in javascript ECMAScript 6
 
 ## Installation
 
-```  
+```sh
   npm install cf-utils
-```  
+```
 
 ## AWS Credentials
 
 The toolset is designed to use your aws profiles. However the default mode is for your to provide, via command line,
-the name of the profile you wish to use for the deployment and the region you are targeting 
-(e.g.`--profile default --region us-east-1`. 
+the name of the profile you wish to use for the deployment and the region you are targeting
+(e.g.`--profile default --region us-east-1`).
 
 ## Usage
 
@@ -51,14 +50,14 @@ Include the toolset using
 
 ```javascript
   let cf = require('cf-utils');
-```  
-
+```
 
 The toolset is not designed to be opinionated so please be creative as you want with how you use these tools.
 There is not a lot of code and while frowned upon you will find out more by looking at the source code than
-what you will read here, so please dive in and have a look around. 
+what you will read here, so please dive in and have a look around.
 
-But as for some guidance, essentially you 
+But as for some guidance, essentially you
+
  1. Setup a base configuration
  2. Determine what parameters you intend to be provided via direct code or command line args
  3. Create CloudFormation templates
@@ -66,26 +65,26 @@ But as for some guidance, essentially you
 
 ### Configuration
 
-The toolset includes a configuration object that not only stores your settings but also can help guard against 
-missing settings or force them to be provided via command line. The config object includes some convenience methods 
-for creating resource names in a consistent manner. In order for these methods to work your configuration must have the 
+The toolset includes a configuration object that not only stores your settings but also can help guard against
+missing settings or force them to be provided via command line. The config object includes some convenience methods
+for creating resource names in a consistent manner. In order for these methods to work your configuration must have the
 following as a minimum:
 
 ```javascript
-     PROJECT:         'Acme Toasters', 
-     PROJECT_VERSION: '0.1',           
+     PROJECT:         'Acme Toasters',
+     PROJECT_VERSION: '0.1',
      PROJECT_PREFIX:  'acme-toasters-'
-```  
+```
 
 To apply your configuration call
 
 ```javascript
-    cf.init({ 
+    cf.init({
       config: {
         // your configuration map
       }
     });
-```  
+```
 
 The configuration can also be setup with a schema for any configuration settings. These schemas help
 provide better context to the caller when they are missing and you can indicate if the toolset should
@@ -95,18 +94,17 @@ For example, this schema describes a config.IMAGE setting that can be provided v
 
 ```javascript
     IMAGE: { description: 'Task docker image', argName: 'image' }
-```  
-
+```
 
 Here is a sample configuration setup:
 
 ```javascript
     cf.init({
       config: {
-        PROJECT:         'Acme Toasters', 
-        PROJECT_VERSION: '0.1',           
+        PROJECT:         'Acme Toasters',
+        PROJECT_VERSION: '0.1',
         PROJECT_PREFIX:  'acme-toasters-',
-    
+
         STACK: {
           CORE: { name: 'core', script: 'templates/core-cf.yaml' },
           VPC:  { name: 'vpc',  script: 'templates/vpc-cf.yaml'  },
@@ -123,21 +121,19 @@ Here is a sample configuration setup:
           }
         }
       },
-    
+
       schema: {
         EC2_AMI:  { description: 'EC2 AMI Image Id',  argName: 'ami' },
         EC2_TYPE: { description: 'EC2 Instance Type', argName: 'itype' }
       }
     })
-```  
-
-
+```
 
 ### Creating Stacks
 
-Everything centers on calling `cf.cloudFormation.upsertStack`. `upsertStack` will create the stack if it 
-does not already exist, update it if it does, provide a changeset for review if you request it and also 
-defer to the AWS CLI if your stack template contains transforms (i.e. SAM) 
+Everything centers on calling `cf.cloudFormation.upsertStack`. `upsertStack` will create the stack if it
+does not already exist, update it if it does, provide a changeset for review if you request it and also
+defer to the AWS CLI if your stack template contains transforms (i.e. SAM)
 
 ### Example Gulp Tasks
 
@@ -282,16 +278,16 @@ Perhaps the best way to describe what the toolset can do is with some examples.
           )
         );
     });
-```  
+```
 
 To deploy the VM stack one could call
 
-```  
-  gulp deploy_vm_stack 
-    --profile default 
-    --region us-east-1 
-    --env dev 
-    --org widgetsandco 
-    --ami ami-12345 
+```sh
+  gulp deploy_vm_stack
+    --profile default
+    --region us-east-1
+    --env dev
+    --org widgetsandco
+    --ami ami-12345
     --itype t2.micro
-```  
+```

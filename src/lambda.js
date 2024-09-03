@@ -1,5 +1,12 @@
 'use strict';
-let config = require('./config');
+const config = require('./config');
+const {
+  LambdaClient,
+  ListFunctionsCommand,
+  ListTagsCommand,
+  UpdateFunctionCodeCommand,
+  InvokeCommand
+} = require('@aws-sdk/client-lambda');
 
 /**
  * List the lambdas that match the specified filter
@@ -7,24 +14,17 @@ let config = require('./config');
  * @param continuationToken continue listing from this marker
  * @returns {Promise}
  */
-function listFunctions(filter, continuationToken) {
-  return new Promise((resolve, reject) => {
-    let lambda = new config.AWS.Lambda();
-    let params = {
-      Marker: continuationToken
-    };
+async function listFunctions(filter, continuationToken) {
+  const lambda = new LambdaClient(config.AWS.clientConfig);
+  let params = {
+    Marker: continuationToken
+  };
 
-   lambda.listFunctions(params, (err, data) => {
-      if (err) {
-        reject(err);
-      } else {
-        if (data && data.Functions) {
-          data.Functions = data.Functions.filter(lambda => lambda.FunctionName.includes(filter))
-        }
-        resolve(data);
-      }
-    });
-  });
+  const data = await lambda.send(new ListFunctionsCommand(params));
+  if (data && data.Functions) {
+    data.Functions = data.Functions.filter(lambda => lambda.FunctionName.includes(filter))
+  }
+  return data;
 }
 
 
@@ -33,18 +33,11 @@ function listFunctions(filter, continuationToken) {
  * @param params AWS updateFunctionCode params
  * @return {Promise}
  */
-function updateFunctionCode(params) {
-  return new Promise((resolve, reject) => {
-    let lambda = new config.AWS.Lambda();
-    lambda.updateFunctionCode(params, (err, data) => {
-      if (err) {
-        reject(err);
-      } else {
-        config.logger.info('Updated Lambda function: ', params.FunctionName);
-        resolve(data);
-      }
-    });
-  });
+async function updateFunctionCode(params) {
+  const lambda = new LambdaClient(config.AWS.clientConfig);
+  const data = await lambda.send(new UpdateFunctionCodeCommand(params));
+  config.logger.info('Updated Lambda function: ', params.FunctionName);
+  return data;
 }
 
 
@@ -53,38 +46,24 @@ function updateFunctionCode(params) {
  * @param filter string pattern to match
  * @param params AWS updateFunctionCode params (note: FunctionName should not be specified)
  */
-function updateFunctionsCode(filter, params) {
-  return new Promise((resolve, reject) => {
+async function updateFunctionsCode(filter, params) {
+  const listAndUpdate = async function (continuationToken) {
+    const data = await listFunctions(filter, continuationToken);
+    if (data && data.Functions && data.Functions.length > 0) {
+      await Promise.all(
+        data.Functions.map((lambda) =>
+          new Promise((resolve) => resolve(updateFunctionCode(
+            Object.assign({}, params, { FunctionName: lambda.FunctionName }))))
+        ));
+    }
 
-    let listAndUpdate = function(continuationToken) {
-      return new Promise((resolve, reject) => {
-        listFunctions(filter, continuationToken)
-          .then(data => {
-            if (data && data.Functions && data.Functions.length > 0) {
-              Promise.all(
-                data.Functions.map((lambda) =>
-                  new Promise((resolve) => resolve(updateFunctionCode(
-                    Object.assign({}, params, { FunctionName: lambda.FunctionName}))))
-                ))
-                .then(() => resolve(data.NextMarker))
-                .catch(err => reject(err));
-            } else {
-              resolve(data ? data.NextMarker : null);
-            }
-          })
-          .catch(err => reject(err));
-      })
-      .then(continuationToken => {
-        if (continuationToken) {
-          return (listAndUpdate(continuationToken))
-        }
-      })
-    };
+    const nextToken = data ? data.NextMarker : null;
+    if (nextToken) {
+      return await listAndUpdate(nextToken);
+    }
+  };
 
-    listAndUpdate()
-      .then(() => resolve())
-      .catch(err => reject(err));
-  });
+  await listAndUpdate();
 }
 
 
@@ -95,27 +74,21 @@ function updateFunctionsCode(filter, params) {
  * @param context [optional] client context details
  * @return {Promise}
  */
-function invokeFunction(name, input, context) {
-  return new Promise((resolve, reject) => {
-    let params = {
-      FunctionName: name,
-      Payload: typeof input !== 'string' ? JSON.stringify(input) : input,
-      ClientContext: context
-    };
-    let lambda = new config.AWS.Lambda();
-    config.logger.info('Invoking Lambda function:', params.FunctionName);
-    lambda.invoke(params, function (err, data) {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(data);
-        config.logger.info('Result (Status Code:', data.StatusCode,'):');
-        config.logger.info({ Payload: JSON.parse(data.Payload)});
-      }
-    });
-  });
-}
+async function invokeFunction(name, input, context) {
+  let params = {
+    FunctionName: name,
+    Payload: typeof input !== 'string' ? JSON.stringify(input) : input,
+    ClientContext: context
+  };
 
+  const lambda = new LambdaClient(config.AWS.clientConfig);
+  config.logger.info('Invoking Lambda function:', params.FunctionName);
+
+  const data = await lambda.send(new InvokeCommand(params));
+  config.logger.info('Result (Status Code:', data.StatusCode, '):');
+  config.logger.info({ Payload: JSON.parse(Buffer.from(data.Payload).toString()) });
+  return data;
+}
 
 
 module.exports = {
