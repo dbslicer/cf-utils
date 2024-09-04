@@ -102,7 +102,7 @@ const mockS3 = {
     return {
       Deleted: objectKeys.map(key => {
         return {
-          DeleteMarker: "true",
+          DeleteMarker: true,
           DeleteMarkerVersionId: key.VersionId,
           Key: key.Key
         }

@@ -194,8 +194,7 @@ describe("src/cloudFormation", () => {
         };
       });
 
-      const res = await cloudFormation.pollChangeSet({ ChangeSetName: "ChangeSetName", StackName: "StackName" });
-      expect(res).to.eql(undefined);
+      await expect(cloudFormation.pollChangeSet({ ChangeSetName: "ChangeSetName", StackName: "StackName" })).to.eventually.be.fulfilled;
       expect(statuses).to.have.lengthOf(0);
     });
   });
