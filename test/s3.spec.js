@@ -147,12 +147,12 @@ describe("src/s3", () => {
     const expected = {
       Deleted: [
         {
-          DeleteMarker: "true",
+          DeleteMarker: true,
           DeleteMarkerVersionId: "A._w1z6EFiCF5uhtQMDal9JDkID9tQ7F",
           Key: "key_1"
         },
         {
-          DeleteMarker: "true",
+          DeleteMarker: true,
           DeleteMarkerVersionId: "iOd_ORxhkKe_e8G8_oSGxt2PjsCZKlkt",
           Key: "key_2"
         }
@@ -228,7 +228,7 @@ describe("src/s3", () => {
       return {
         Deleted: input.Delete.Objects.map(key => {
           return {
-            DeleteMarker: "true",
+            DeleteMarker: true,
             DeleteMarkerVersionId: key.VersionId,
             Key: key.Key
           }
@@ -253,9 +253,7 @@ describe("src/s3", () => {
       return {
         IsTruncated: true,
         Contents: [
-          {
-            Key: "object_key",
-          },
+          { Key: "object_key" },
         ]
       };
     });
@@ -279,7 +277,7 @@ describe("src/s3", () => {
       return {
         Deleted: input.Delete.Objects.map(key => {
           return {
-            DeleteMarker: "true",
+            DeleteMarker: true,
             DeleteMarkerVersionId: key.VersionId,
             Key: key.Key
           }

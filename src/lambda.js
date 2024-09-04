@@ -3,7 +3,6 @@ const config = require('./config');
 const {
   LambdaClient,
   ListFunctionsCommand,
-  ListTagsCommand,
   UpdateFunctionCodeCommand,
   InvokeCommand
 } = require('@aws-sdk/client-lambda');

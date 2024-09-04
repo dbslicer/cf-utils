@@ -131,7 +131,7 @@ describe("src/keypair", () => {
       // Create key pair without saving to S3
       return expect(keypair.deleteKeyPair(name, bucketName, key)).to.eventually.deep.equal({
         Deleted: [{
-          DeleteMarker: 'true',
+          DeleteMarker: true,
           DeleteMarkerVersionId: undefined,
           Key: key
         }]

@@ -13,6 +13,12 @@ all the parameters it needs or your infrastructure can be created directly yet s
 
 ## Latest Update
 
+### v2.0.1
+
+#### Changes
+
+- Bumped AWS SDK v3 Client versions
+
 ### v2.0.0
 
 #### Changes
