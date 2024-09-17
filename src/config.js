@@ -43,7 +43,7 @@ let baseConfig = {
     },
    *
    */
-  schema : {
+  schema: {
     PROJECT:             { description: 'ACS Project Name',                        alias: 'project'           },
     PROJECT_VERSION:     { description: 'ACS Project Version (e.g. poc, mvp1)',    alias: 'projectVersion'    },
     PROJECT_PREFIX:      { description: 'ACS Project Prefix',                      alias: 'projectPrefix'     },
@@ -72,6 +72,10 @@ let baseConfig = {
     return {
       /**
        * Generate Config for AWS Service Clients
+       *
+       * If both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set, credentials will be sourced from the environment.
+       * Otherwise, the default credential provider chain is used.
+       *
        * @returns {{credentials: AwsCredentialIdentityProvider, retryStrategy: ConfiguredRetryStrategy}} Client Config
        */
       get clientConfig() {
@@ -79,16 +83,21 @@ let baseConfig = {
         process.env.AWS_REGION = config.AWS_REGION;
 
         const { ConfiguredRetryStrategy } = require("@smithy/util-retry");
-        const { fromIni } = require("@aws-sdk/credential-providers");
+        const { fromEnv } = require("@aws-sdk/credential-providers");
 
         delete this.clientConfig;
-        this.clientConfig = {
-          credentials: fromIni(),
-          retryStrategy: new ConfiguredRetryStrategy(
-            12, // max attempts / retries
-            (retryAttempt) => (retryAttempt + 2) * 1000 // backoff function
-          )
-        };
+        this.clientConfig = Object.assign(
+          // Retry Strategy
+          {
+            retryStrategy: new ConfiguredRetryStrategy(
+              12, // max attempts / retries
+              (retryAttempt) => (retryAttempt + 2) * 1000 // backoff function
+            )
+          },
+          // Credentials
+          (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ? { credentials: fromEnv() } : {}
+        );
+
         return this.clientConfig;
       },
     };
