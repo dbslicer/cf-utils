@@ -13,6 +13,12 @@ all the parameters it needs or your infrastructure can be created directly yet s
 
 ## Latest Update
 
+### v2.0.2
+
+#### Changes
+
+- When creating the client configuration, `cf-utils` now checks whether `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set in the environment. If they are, those credentials are used. Otherwise, the credentials are sourced from the default credentials provider chain. This resolves an issue in environments where AWS keys are set, but an AWS profile is also configured without corresponding credentials.
+
 ### v2.0.1
 
 #### Changes
