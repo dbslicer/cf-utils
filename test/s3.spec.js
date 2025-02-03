@@ -12,7 +12,8 @@ const {
   GetBucketVersioningCommand,
   PutObjectCommand,
   CreateMultipartUploadCommand, // Used for lib-storage/Upload
-  UploadPartCommand // Used for lib-storage/Upload
+  UploadPartCommand, // Used for lib-storage/Upload
+  PutBucketNotificationConfigurationCommand
 } = require('@aws-sdk/client-s3');
 
 // Rewire
@@ -349,6 +350,44 @@ describe("src/s3", () => {
     s3Mock.on(UploadPartCommand).resolves({ ETag: '1' });
 
     return expect(s3.uploadDirectoryAsZipFile(bucket, key, dir, dir, key)).to.eventually.deep.equal(`${mockFs.ONLY_FILES_DIR}/${key}`);
+  });
+
+  // putBucketNotificationConfiguration
+  it("puts bucket notification configuration", async () => {
+    const params = {
+      Bucket: "bucket",
+      NotificationConfiguration: {
+        EventBridgeConfiguration: {},
+        LambdaFunctionConfigurations: [],
+        QueueConfigurations: [],
+        TopicConfigurations: []
+      }
+    };
+
+    s3Mock.on(PutBucketNotificationConfigurationCommand).callsFake(input => {
+      expect(input).to.eql(params);
+      return {
+        '$metadata': {
+          httpStatusCode: 200,
+          requestId: 'requestId',
+          extendedRequestId: 'extendedRequestId',
+          cfId: undefined,
+          attempts: 1,
+          totalRetryDelay: 0
+        }
+      };
+    });
+
+    return expect(s3.putBucketNotificationConfiguration(params)).to.eventually.deep.equal({
+      '$metadata': {
+          httpStatusCode: 200,
+          requestId: 'requestId',
+          extendedRequestId: 'extendedRequestId',
+          cfId: undefined,
+          attempts: 1,
+          totalRetryDelay: 0
+        }
+    });
   });
 
 });

@@ -13,6 +13,13 @@ all the parameters it needs or your infrastructure can be created directly yet s
 
 ## Latest Update
 
+### v2.0.3
+
+#### Changes
+
+- Added putBucketNotificationConfiguration to s3 (this is required in stack tasks, otherwise you get a circular dependency in cloudformation. This is the aws recommended approach to this problem)
+- Fixed an issue where if there were no updates to be made to a stack, the stack info would not be returned
+
 ### v2.0.2
 
 #### Changes

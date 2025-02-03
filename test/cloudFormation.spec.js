@@ -447,6 +447,44 @@ describe("src/cloudFormation", () => {
       expect(statuses).to.have.lengthOf(0);
     });
 
+    it("updates stack - no changes", async () => {
+      // Statues
+      let statuses = [
+        "UPDATE_IN_PROGRESS",
+        "UPDATE_COMPLETE",
+      ];
+
+      const params = {
+        StackName: "StackName",
+        TemplateBody: "TemplateBody",
+        TemplateURL: "TemplateURL",
+      };
+
+      // Mock UpdateStackCommand
+      cfMock.on(UpdateStackCommand).callsFake(input => {
+        expect(input).to.eql(params);
+        throw new Error("No updates are to be performed");
+      });
+
+      // Mock DescribeChangeSetCommand
+      cfMock.on(DescribeStacksCommand).callsFake(input => {
+        expect(input).to.eql({ StackName: params.StackName });
+        return {
+          Stacks: [{
+            StackName: input.StackName,
+            StackStatus: statuses.shift(),
+          }]
+        };
+      });
+
+      // Update stack
+      await expect(cloudFormation.updateStack(params)).to.eventually.deep.equal(
+        { Stacks: [{ StackName: params.StackName, StackStatus: "UPDATE_COMPLETE" }] }
+      );
+
+      expect(statuses).to.have.lengthOf(0);
+    });
+
     it("fails to update stack - update failed", async () => {
       // Statues
       let statuses = [
@@ -500,6 +538,14 @@ describe("src/cloudFormation", () => {
         expect(input).to.eql(params);
         throw new Error(reasons.shift());
       });
+
+      // Mock pollStack
+      const mockPollStack = function (input) {
+        expect(input).to.eql(params);
+        return Promise.resolve({});
+      };
+      const mockPollStackRestore = cloudFormation.__set__("pollStack", mockPollStack);
+      stubs.push({ restore: function() {return mockPollStackRestore();} });
 
       await expect(cloudFormation.updateStack(params)).to.eventually.be.fulfilled;
       await expect(cloudFormation.updateStack(params)).to.eventually.be.rejectedWith("Other thrown error");
