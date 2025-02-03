@@ -1,6 +1,6 @@
 {
   "name": "cf-utils",
-  "version": "1.1.15",
+  "version": "2.0.2",
   "description": "Tools and utilities to help build task runner style deployment pipelines with AWS CloudFormation",
   "author": "David Boland",
   "license": "Unlicense",
@@ -8,14 +8,37 @@
     "type": "git",
     "url": "https://github.com/dbslicer/cf-utils.git"
   },
-  "scripts": {},
+  "scripts": {
+    "test": "mocha ./test/*.spec.js"
+  },
   "dependencies": {
-    "archiver": "^2.0.3",
-    "aws-sdk": "^2.63.0",
-    "bunyan": "^1.8.3",
+    "@aws-sdk/client-cloudformation": "^3.637.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.637.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.637.0",
+    "@aws-sdk/client-ec2": "^3.637.0",
+    "@aws-sdk/client-firehose": "^3.637.0",
+    "@aws-sdk/client-glue": "^3.637.0",
+    "@aws-sdk/client-iam": "^3.637.0",
+    "@aws-sdk/client-iot": "^3.637.0",
+    "@aws-sdk/client-kinesis-analytics": "^3.637.0",
+    "@aws-sdk/client-lambda": "^3.637.0",
+    "@aws-sdk/client-s3": "^3.637.0",
+    "@aws-sdk/client-ssm": "^3.637.0",
+    "@aws-sdk/credential-providers": "^3.637.0",
+    "@aws-sdk/lib-storage": "^3.637.0",
+    "@smithy/util-retry": "^3.0.3",
+    "archiver": "^7.0.1",
+    "bunyan": "^1.8.15",
     "bunyan-prettystream": "^0.1.3",
-    "generate-password": "^1.4.2",
-    "inquirer": "^3.2.1",
-    "mime-types": "^2.1.17"
+    "generate-password": "^1.7.1",
+    "inquirer": "^8.2.6",
+    "mime-types": "^2.1.35"
+  },
+  "devDependencies": {
+    "aws-sdk-client-mock": "^4.0.1",
+    "chai": "^4.5.0",
+    "chai-as-promised": "^7.1.1",
+    "mocha": "^10.7.3",
+    "rewire": "^6.0.0"
   }
 }

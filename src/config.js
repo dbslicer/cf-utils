@@ -43,7 +43,7 @@ let baseConfig = {
     },
    *
    */
-  schema : {
+  schema: {
     PROJECT:             { description: 'ACS Project Name',                        alias: 'project'           },
     PROJECT_VERSION:     { description: 'ACS Project Version (e.g. poc, mvp1)',    alias: 'projectVersion'    },
     PROJECT_PREFIX:      { description: 'ACS Project Prefix',                      alias: 'projectPrefix'     },
@@ -60,7 +60,7 @@ let baseConfig = {
    * Initialize configuration.
    * @param configuration configuration setup for this session
    */
-  init : (configuration) => {
+  init: (configuration) => {
     if (configuration.config) { Object.assign(baseConfig, configuration.config); }
     if (configuration.schema) { Object.assign(baseConfig.schema, configuration.schema); }
   },
@@ -69,11 +69,38 @@ let baseConfig = {
    * Prime AWS environment and return AWS object.
    */
   get AWS() {
-    process.env.AWS_PROFILE = config.AWS_PROFILE;
-    process.env.AWS_REGION = config.AWS_REGION;
+    return {
+      /**
+       * Generate Config for AWS Service Clients
+       *
+       * If both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set, credentials will be sourced from the environment.
+       * Otherwise, the default credential provider chain is used.
+       *
+       * @returns {{credentials: AwsCredentialIdentityProvider, retryStrategy: ConfiguredRetryStrategy}} Client Config
+       */
+      get clientConfig() {
+        process.env.AWS_PROFILE = config.AWS_PROFILE;
+        process.env.AWS_REGION = config.AWS_REGION;
 
-    delete this.AWS;
-    return this.AWS = require('aws-sdk');
+        const { ConfiguredRetryStrategy } = require("@smithy/util-retry");
+        const { fromEnv } = require("@aws-sdk/credential-providers");
+
+        delete this.clientConfig;
+        this.clientConfig = Object.assign(
+          // Retry Strategy
+          {
+            retryStrategy: new ConfiguredRetryStrategy(
+              12, // max attempts / retries
+              (retryAttempt) => (retryAttempt + 2) * 1000 // backoff function
+            )
+          },
+          // Credentials
+          (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ? { credentials: fromEnv() } : {}
+        );
+
+        return this.clientConfig;
+      },
+    };
   },
 
   /**
@@ -109,7 +136,7 @@ let baseConfig = {
    * @param suffix
    * @return {*}
    */
-  getResourceName : (suffix) => {
+  getResourceName: (suffix) => {
     return config.getResourcePrefix() + suffix;
   },
 
@@ -117,7 +144,7 @@ let baseConfig = {
    * Get the prefix for all core resources
    * @return {string}
    */
-  getResourcePrefix : () => {
+  getResourcePrefix: () => {
     return config.PROJECT_PREFIX + config.ENVIRONMENT_STAGE + '-';
   },
 
@@ -126,7 +153,7 @@ let baseConfig = {
    * @param suffix
    * @return {*}
    */
-  getOrgResourceName : (suffix) => {
+  getOrgResourceName: (suffix) => {
     return config.getOrgResourcePrefix() + suffix;
   },
 
@@ -134,7 +161,7 @@ let baseConfig = {
    * Get the prefix for all org resources
    * @return {string}
    */
-  getOrgResourcePrefix : () => {
+  getOrgResourcePrefix: () => {
     return config.PROJECT_PREFIX + config.ORGANIZATION + '-' + config.ENVIRONMENT_STAGE + '-';
   },
 
@@ -143,7 +170,7 @@ let baseConfig = {
    * @param suffix
    * @return {*}
    */
-  getTenantResourceName : (suffix) => {
+  getTenantResourceName: (suffix) => {
     return config.getTenantResourcePrefix() + suffix;
   },
 
@@ -151,7 +178,7 @@ let baseConfig = {
    * Get the prefix for all tenant resources
    * @return {string}
    */
-  getTenantResourcePrefix : () => {
+  getTenantResourcePrefix: () => {
     return config.PROJECT_PREFIX + config.TENANT + '-' + config.ENVIRONMENT_STAGE + '-';
   },
 
@@ -160,7 +187,7 @@ let baseConfig = {
    * @param name
    * @return {*}
    */
-  getParameterName : (name) => {
+  getParameterName: (name) => {
     return config.getParameterPrefix() + name;
   },
 
@@ -168,7 +195,7 @@ let baseConfig = {
    * Get the prefix for all core parameters
    * @return {string}
    */
-  getParameterPrefix : () => {
+  getParameterPrefix: () => {
     return config.PROJECT_PREFIX + config.ENVIRONMENT_STAGE + '-' + config.AWS_REGION + '-';
   },
 
@@ -177,7 +204,7 @@ let baseConfig = {
    * @param name
    * @return {*}
    */
-  getOrgParameterName : (name) => {
+  getOrgParameterName: (name) => {
     return config.getOrgParameterPrefix() + name;
   },
 
@@ -185,7 +212,7 @@ let baseConfig = {
    * Get the prefix for all org parameters
    * @return {string}
    */
-  getOrgParameterPrefix : () => {
+  getOrgParameterPrefix: () => {
     return config.PROJECT_PREFIX + config.ORGANIZATION + '-' + config.ENVIRONMENT_STAGE + '-' + config.AWS_REGION + '-';
   },
 
@@ -194,7 +221,7 @@ let baseConfig = {
    * @param name
    * @return {*}
    */
-  getTenantParameterName : (name) => {
+  getTenantParameterName: (name) => {
     return config.getTenantParameterPrefix() + name;
   },
 
@@ -202,7 +229,7 @@ let baseConfig = {
    * Get the prefix for all tenant parameters
    * @return {string}
    */
-  getTenantParameterPrefix : () => {
+  getTenantParameterPrefix: () => {
     return config.PROJECT_PREFIX + config.TENANT + '-' + config.ENVIRONMENT_STAGE + '-' + config.AWS_REGION + '-';
   },
 
@@ -210,7 +237,7 @@ let baseConfig = {
    * Get the name of the lambda zip file
    * @return {string}
    */
-  getLambdaZipName : () => {
+  getLambdaZipName: () => {
     return config.API_PACKAGE_PREFIX + config.API_PACKAGE_VERSION + '.zip';
   },
 
@@ -218,7 +245,7 @@ let baseConfig = {
    * Get the S3 object key for the lambda bundle
    * @return {string}
    */
-  getLambdaZipS3Key : () => {
+  getLambdaZipS3Key: () => {
     return 'api/' + config.getLambdaZipName();
   }
 
@@ -232,7 +259,7 @@ let config = new Proxy(baseConfig, {
    * Get the specified config parameter (value will be sourced from command line, alias or schema default if available)
    */
   get: (target, parameter) => {
-    if (!target.hasOwnProperty(parameter) && parameter !== 'inspect' && typeof(parameter) === 'string') {
+    if (!target.hasOwnProperty(parameter) && parameter !== 'inspect' && typeof (parameter) === 'string') {
       let value = undefined;
       let schema = target.schema[parameter] ||
         target.schema[Object.keys(target.schema).find(p => target.schema[p].alias === parameter)] || {};

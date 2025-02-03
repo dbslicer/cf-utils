@@ -35,6 +35,11 @@ module.exports = {
   iam: require('./src/iam'),
 
   /**
+   * Iot cloud formation utilities
+   */
+  iot: require('./src/iot'),
+
+  /**
    * EC2 key pair cloud formation utilities
    */
   keypair: require('./src/keypair'),

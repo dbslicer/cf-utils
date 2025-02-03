@@ -1,24 +1,22 @@
 'use strict';
-let config = require('./config');
-
+const config = require('./config');
+const {
+  SSMClient,
+  PutParameterCommand,
+  GetParametersCommand,
+  DeleteParameterCommand
+} = require('@aws-sdk/client-ssm');
 
 /**
  * Upsert parameter
  * @param params AWS putParameter params
  * @return {Promise}
  */
-function putParameter(params) {
-  return new Promise((resolve, reject) => {
-    let ssm = new config.AWS.SSM();
-    ssm.putParameter(params, (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        config.logger.info('Successfully upserted parameter: ' + params.Name);
-        resolve(params.Name);
-      }
-    });
-  });
+async function putParameter(params) {
+  const ssm = new SSMClient(config.AWS.clientConfig);
+  await ssm.send(new PutParameterCommand(params));
+  config.logger.info('Successfully upserted parameter: ' + params.Name);
+  return params.Name;
 }
 
 /**
@@ -26,26 +24,20 @@ function putParameter(params) {
  * @param name name of the parameter
  * @return {Promise}
  */
-function getParameter(name) {
-  return new Promise((resolve, reject) => {
-    let params = {
-      Names: [ name ],
-      WithDecryption: true
-    };
-    let ssm = new config.AWS.SSM();
-    ssm.getParameters(params, (err, data) => {
-      if (err) {
-        reject(err);
-      } else {
-        if (data.Parameters && data.Parameters.length > 0) {
-          config.logger.info('Successfully retrieved parameter: ' + params.Name);
-          resolve(data.Parameters[0]);
-        } else {
-          reject('Parameter not found');
-        }
-      }
-    });
-  });
+async function getParameter(name) {
+  let params = {
+    Names: [name],
+    WithDecryption: true
+  };
+  const ssm = new SSMClient(config.AWS.clientConfig);
+  const data = await ssm.send(new GetParametersCommand(params));
+
+  if (data.Parameters && data.Parameters.length > 0) {
+    config.logger.info('Successfully retrieved parameter: ' + params.Names[0]);
+    return data.Parameters[0];
+  } else {
+    throw new Error("Parameter not found");
+  }
 }
 
 /**
@@ -53,20 +45,13 @@ function getParameter(name) {
  * @param name
  * @return {Promise}
  */
-function checkParameter(name) {
-  return new Promise((resolve, reject) => {
-    let params = {
-      Names: [ name ]
-    };
-    let ssm = new config.AWS.SSM();
-    ssm.getParameters(params, (err, data) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(data.Parameters && data.Parameters.length > 0);
-      }
-    });
-  });
+async function checkParameter(name) {
+  let params = {
+    Names: [name]
+  };
+  const ssm = new SSMClient(config.AWS.clientConfig);
+  const data = await ssm.send(new GetParametersCommand(params));
+  return data.Parameters ? data.Parameters.length > 0 : false;
 }
 
 /**
@@ -74,21 +59,15 @@ function checkParameter(name) {
  * @param name name of the parameter
  * @return {Promise}
  */
-function deleteParameter(name) {
-  return new Promise((resolve, reject) => {
-    let params = {
-      Name: name
-    };
-    let ssm = new config.AWS.SSM();
-    ssm.deleteParameter(params, (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        config.logger.info('Successfully deleted parameter: ' + params.Name);
-        resolve(params.Name);
-      }
-    });
-  });
+async function deleteParameter(name) {
+  let params = {
+    Name: name
+  };
+  const ssm = new SSMClient(config.AWS.clientConfig);
+  await ssm.send(new DeleteParameterCommand(params));
+
+  config.logger.info('Successfully deleted parameter: ' + params.Name);
+  return params.Name;
 }
 
 module.exports = {
