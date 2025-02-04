@@ -11,7 +11,8 @@ const {
   ListObjectVersionsCommand,
   DeleteObjectsCommand,
   GetBucketVersioningCommand,
-  PutObjectCommand
+  PutObjectCommand,
+  PutBucketNotificationConfigurationCommand
 } = require('@aws-sdk/client-s3');
 
 /**
@@ -261,6 +262,18 @@ async function uploadDirectoryAsZipFile(bucketName, key, source, dest, name) {
   return fullPath;
 }
 
+/**
+ * Add a notification configuration to the specified bucket
+ * @param params AWS bucket notification configuration params
+ * @returns {Promise}
+ */
+async function putBucketNotificationConfiguration(params) {
+  const s3 = new S3Client(config.AWS.clientConfig);
+  const res = await s3.send(new PutBucketNotificationConfigurationCommand(params));
+  config.logger.info('Successfully added notification configuration to s3://', params.Bucket);
+  return res
+}
+
 
 module.exports = {
   putS3Object,
@@ -270,5 +283,6 @@ module.exports = {
   deleteVersionedObjects,
   emptyBucket,
   uploadDirectory,
-  uploadDirectoryAsZipFile
+  uploadDirectoryAsZipFile,
+  putBucketNotificationConfiguration
 };

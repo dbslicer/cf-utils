@@ -178,7 +178,6 @@ async function updateStack(params) {
   } catch (err) {
     if (err.toString().indexOf('No updates are to be performed') >= 0) {
       config.logger.info('There are no changes to apply, continuing....');
-      return;
     } else {
       throw err;
     }
